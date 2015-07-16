@@ -1,0 +1,366 @@
+//----------------------------------------------------------------
+// シェープ名の取得
+//----------------------------------------------------------------
+proc string getShapeName( string $objectName )
+{
+	string $list[];
+
+	// シェープ名の取得
+	$list	= `listHistory $objectName`;
+	$list	= `ls -type shape $list`;
+
+	// 無
+	if( size( $list ) == 0 ){
+		return "";
+	}
+
+	return $list[ 0 ];
+}
+//----------------------------------------------------------------
+// セルの変更時コールバック
+//----------------------------------------------------------------
+global proc int VertexListEditorCellChangedCmd( int $row, int $column, string $value )
+{
+	// グローバル
+	global string	$g_vertex_names[];
+	global int		$g_creating;
+
+	// ローカル
+	float $f_value;
+
+	// 作成中
+	if( $g_creating == 1 ){
+		return 1;
+	}
+
+	// インデックスに変換
+	int $i = $row - 1;
+
+	// 名前の変更はしない
+	if( $column == 1 ){
+		if( $value != $g_vertex_names[ $i ] ){
+			return 0;
+		}
+		return 1;
+	}
+
+	// 文字列を数値化
+	$f_value = float( $value );
+
+	// 頂点を選択
+	select -r $g_vertex_names[ $i ];
+
+	// シェイプ名を取得
+	string $shapeName = getShapeName( $g_vertex_names[ $i ] );
+	if( $shapeName == "" ){
+		return 0;
+	}
+
+	// 頂点X
+	if( $column == 2 ){
+		move -x $f_value;
+		return 1;
+	}
+
+	// 頂点Y
+	if( $column == 3 ){
+		move -y $f_value;
+		return 1;
+	}
+
+	// 頂点Z
+	if( $column == 4 ){
+		move -z $f_value;
+		return 1;
+	}
+
+	// 頂点カラー表示
+	if( $column >= 5 && $column <= 8 ){
+		polyColorPerVertex -cdo $shapeName;
+	}
+
+	// 頂点カラーR
+	if( $column == 5 ){
+		polyColorPerVertex -r $f_value;
+		return 1;
+	}
+
+	// 頂点カラーG
+	if( $column == 6 ){
+		polyColorPerVertex -g $f_value;
+		return 1;
+	}
+
+	// 頂点カラーB
+	if( $column == 7 ){
+		polyColorPerVertex -b $f_value;
+		return 1;
+	}
+
+	// 頂点カラーA
+	if( $column == 8 ){
+		polyColorPerVertex -a $f_value;
+		return 1;
+	}
+
+	// 法線X
+	if( $column == 9 ){
+		polyNormalPerVertex -x $f_value;
+		return 1;
+	}
+
+	// 法線Y
+	if( $column == 10 ){
+		polyNormalPerVertex -y $f_value;
+		return 1;
+	}
+
+	// 法線Z
+	if( $column == 11 ){
+		polyNormalPerVertex -z $f_value;
+		return 1;
+	}
+
+	return 1;
+}
+//----------------------------------------------------------------
+// リストの選択で頂点の選択を更新
+//----------------------------------------------------------------
+global proc VertexListEditorSelectionChangedCmd()
+{
+	// グローバル
+	global string	$g_table;
+	global string	$g_vertex_names[];
+
+	// ローカル
+	int $i;
+	int $vertex_cnt;
+	int $row;
+
+	// 現在選択されているセル
+	int $selectedCells[] = `scriptTable -q -sc $g_table`;
+
+	// 非選択
+	select -cl;
+
+	$vertex_cnt = `size $selectedCells`;
+
+	for( $i = 0 ; $i < $vertex_cnt ; $i++ ){
+
+		$row = $selectedCells[ $i ] - 1;
+
+		// 最初
+		if( $i == 0 ){
+			select -r $g_vertex_names[ $row ];
+			$i++;
+			continue;
+		}
+
+		// 追加
+		select -tgl $g_vertex_names[ $row ];
+		$i++;
+	}
+}
+//----------------------------------------------------------------
+// 頂点情報の取得
+//----------------------------------------------------------------
+global proc VertexListEditorGetVertex()
+{
+	// グローバル
+	global string	$g_table;
+	global string	$g_vertex_names[];
+	global int		$g_creating;
+
+	// ローカル
+	float	$v_x[];
+	float	$v_y[];
+	float	$v_z[];
+
+	float	$v_nx[];
+	float	$v_ny[];
+	float	$v_nz[];
+
+	float	$v_r[];
+	float	$v_g[];
+	float	$v_b[];
+	float	$v_a[];
+
+	// ローカル
+	int $rows;
+	int $i;
+	int $vertex_cnt;
+
+	// 作成中
+	$g_creating	= 1;
+
+	// 配列をクリア
+	clear $g_vertex_names;
+
+	// 選択リスト
+	string $sels[]				= `polyListComponentConversion -tv`;
+	string $g_vertex_names[]	= `filterExpand -sm 31 $sels`;
+
+	// 全ての行を消す
+	$rows = `scriptTable -q -r $g_table`;
+	$rows--;
+	for( $i = $rows ; $i > 0 ; $i-- ){
+		scriptTable -edit -dr $i $g_table;
+	}
+
+	// 頂点の情報をグローバル変数に格納
+	$vertex_cnt = `size $g_vertex_names`;
+	for( $i = 0 ; $i < $vertex_cnt ; $i++ ){
+
+		// 座標
+		float $xyz[] = `pointPosition -w $g_vertex_names[ $i ]`;
+		floatArrayInsertAtIndex( $i, $v_x, $xyz[ 0 ] );
+		floatArrayInsertAtIndex( $i, $v_y, $xyz[ 1 ] );
+		floatArrayInsertAtIndex( $i, $v_z, $xyz[ 2 ] );
+
+		// 頂点カラー
+		if( size( `polyColorSet -q -acs $g_vertex_names[ $i ]` ) == 0 ){
+			floatArrayInsertAtIndex( $i, $v_r, 0.0 );
+			floatArrayInsertAtIndex( $i, $v_g, 0.0 );
+			floatArrayInsertAtIndex( $i, $v_b, 0.0 );
+			floatArrayInsertAtIndex( $i, $v_a, 1.0 );
+		}else{
+			float $rgba[] = `polyColorPerVertex -q -r -g -b -a $g_vertex_names[ $i ]`;
+			floatArrayInsertAtIndex( $i, $v_r, $rgba[ 0 ] );
+			floatArrayInsertAtIndex( $i, $v_g, $rgba[ 1 ] );
+			floatArrayInsertAtIndex( $i, $v_b, $rgba[ 2 ] );
+			floatArrayInsertAtIndex( $i, $v_a, $rgba[ 3 ] );
+		}
+
+		// 法線
+		float $n_xyz[] = `polyNormalPerVertex -q -xyz $g_vertex_names[ $i ]`;
+		floatArrayInsertAtIndex( $i, $v_nx, $n_xyz[ 0 ] );
+		floatArrayInsertAtIndex( $i, $v_ny, $n_xyz[ 1 ] );
+		floatArrayInsertAtIndex( $i, $v_nz, $n_xyz[ 2 ] );
+	}
+
+	// 挿入
+	for( $i = 0 ; $i < $vertex_cnt ; $i++ ){
+		scriptTable -edit -insertRow 1 $g_table;
+	}
+
+	// スクリプトテーブルにセット
+	for( $i = 0 ; $i < $vertex_cnt ; $i++ ){
+
+		int $row = $i + 1;
+
+		// 名前
+		scriptTable -edit -cellIndex $row 1 -cellValue $g_vertex_names[ $i ] $g_table;
+
+		// 座標
+		scriptTable -edit -cellIndex $row 2 -cellValue $v_x[ $i ] $g_table;
+		scriptTable -edit -cellIndex $row 3 -cellValue $v_y[ $i ] $g_table;
+		scriptTable -edit -cellIndex $row 4 -cellValue $v_z[ $i ] $g_table;
+
+		// 頂点カラー
+		scriptTable -edit -cellIndex $row 5 -cellValue $v_r[ $i ] $g_table;
+		scriptTable -edit -cellIndex $row 6 -cellValue $v_g[ $i ] $g_table;
+		scriptTable -edit -cellIndex $row 7 -cellValue $v_b[ $i ] $g_table;
+		scriptTable -edit -cellIndex $row 8 -cellValue $v_a[ $i ] $g_table;
+
+		// 法線
+		scriptTable -edit -cellIndex $row  9 -cellValue $v_nx[ $i ] $g_table;
+		scriptTable -edit -cellIndex $row 10 -cellValue $v_ny[ $i ] $g_table;
+		scriptTable -edit -cellIndex $row 11 -cellValue $v_nz[ $i ] $g_table;
+	}
+
+	// 作成中解除
+	$g_creating	= 0;
+}
+//----------------------------------------------------------------
+// リストから頂点情報の再取得
+//----------------------------------------------------------------
+global proc VertexListEditorReGetVertex()
+{
+	// グローバル
+	global string	$g_vertex_names[];
+
+	// ローカル
+	int $i;
+	int $vertex_cnt;
+
+	// 非選択
+	select -cl;
+
+	$vertex_cnt = `size $g_vertex_names`;
+
+	for( $i = 0 ; $i < $vertex_cnt ; $i++ ){
+
+		// 最初
+		if( $i == 0 ){
+			select -r $g_vertex_names[ $i ];
+			continue;
+		}
+
+		// 追加
+		select -tgl $g_vertex_names[ $i ];
+	}
+
+	// 頂点情報の取得
+	VertexListEditorGetVertex();
+}
+//----------------------------------------------------------------
+// 頂点リストエディタ
+//----------------------------------------------------------------
+global proc VertexListEditor()
+{
+	// グローバル
+	global string	$g_table;
+	global string	$g_vertex_names[];
+	global int		$g_creating;
+
+	// window 作成
+	string $window		= `window -t "VertexListEditor" -widthHeight 1110 300`;
+
+	// formLayout 作成
+	string $form		= `formLayout`;
+
+	// スクリプトテーブルの作成
+	$g_table				= `scriptTable -r 0
+		-c 11
+		-label 1	"名前"
+		-label 2	"頂点X"
+		-label 3	"頂点Y"
+		-label 4	"頂点Z"
+		-label 5	"赤"
+		-label 6	"緑"
+		-label 7	"青"
+		-label 8	"アルファ"
+		-label 9	"法線X"
+		-label 10	"法線Y"
+		-label 11	"法線Z"
+		-ccc VertexListEditorCellChangedCmd
+		-scc VertexListEditorSelectionChangedCmd`;
+
+	// 頂点情報の取得ボタンの作成
+	string $getButton	= `button -label "頂点情報の取得"	-command "VertexListEditorGetVertex"`;
+
+	// リストから頂点情報の再取得ボタンの作成
+	string $regetButton	= `button -label "リストから再取得"	-command "VertexListEditorReGetVertex"`;
+
+	// レイアウト設定
+	formLayout -edit
+		-attachForm		$g_table		"top"		0
+		-attachForm		$g_table		"left"		0
+		-attachControl	$g_table		"bottom"	0 $getButton
+		-attachForm		$g_table		"right"		0
+
+		-attachNone		$getButton		"top"
+		-attachForm		$getButton		"left"		0
+		-attachForm		$getButton		"bottom"	0
+		-attachPosition $getButton		"right"		0 30
+
+		-attachNone		$regetButton	"top"
+		-attachPosition	$regetButton	"left"		0 70
+		-attachForm		$regetButton	"bottom"	0
+		-attachForm		$regetButton	"right"		0
+	$form;
+
+	// window 表示
+	showWindow $window;
+}
+//----------------------------------------------------------------
