@@ -1,0 +1,121 @@
+//----------------------------------------------------------------
+// 頂点情報の取得
+//----------------------------------------------------------------
+global proc NormalCopyGetVertex()
+{
+	// グローバル
+	global string $g_minLengthTextField;
+
+	// ローカル
+	int $i1;
+	int $i2;
+
+	// 参照する距離
+ 	float $minLength = float( `textField -q -tx $g_minLengthTextField` );
+
+	// 選択しているトランスフォームを取得
+	string $transforms[] = `ls -sl -tr`;
+
+	// トランスフォーム数を取得
+	int $transforms_cnt = size( $transforms );
+
+	// 選択されているトランスフォームが１以下の場合は処理しない
+	if( $transforms_cnt <= 1 ){
+		return;
+	}
+
+	// 最後に選択されたトランスフォームを取得
+	string $last_transform = $transforms[ $transforms_cnt - 1 ];
+
+	// 最後に選択されたトランスフォームを削除
+	stringArrayRemoveAtIndex( $transforms_cnt - 1, $transforms );
+
+	// トランスフォーム数を１減らす
+	$transforms_cnt--;
+
+	// 頂点情報を取得
+	string $sels1[]				= `polyListComponentConversion -tv $transforms`;
+	string $vertex_names1[]		= `filterExpand -sm 31 $sels1`;
+	int	$vertex_cnt1			= size( $vertex_names1 );
+
+	// 頂点情報を取得(最後に選択されたトランスフォーム)
+	string $sels2[]				= `polyListComponentConversion -tv $last_transform`;
+	string $vertex_names2[]		= `filterExpand -sm 31 $sels2`;
+	int	$vertex_cnt2			= size( $vertex_names2 );
+
+	for( $i1 = 0 ; $i1 < $vertex_cnt1 ; $i1++ ){
+
+		// 座標を取得
+		float $xyz1[]	= `pointPosition -w $vertex_names1[ $i1 ]`;
+		vector $vec1	= << $xyz1[ 0 ], $xyz1[ 1 ], $xyz1[ 2 ] >>;
+
+		for( $i2 = 0 ; $i2 < $vertex_cnt2 ; $i2++ ){
+
+			// 座標を取得
+			float $xyz2[]	= `pointPosition -w $vertex_names2[ $i2 ]`;
+			vector $vec2	= << $xyz2[ 0 ], $xyz2[ 1 ], $xyz2[ 2 ] >>;
+
+			// 距離
+			vector $vec1_vec2 = $vec1 - $vec2;
+			float $len = `mag $vec1_vec2`;
+
+			// 距離が範囲外
+			if( $len > $minLength ){
+				continue;
+			}
+
+			// コピーする法線を取得
+			float $n_xyz[] = `polyNormalPerVertex -q -xyz $vertex_names2[ $i2 ]`;
+
+			// コピー
+			polyNormalPerVertex -xyz $n_xyz[ 0 ] $n_xyz[ 1 ] $n_xyz[ 2 ] $vertex_names1[ $i1 ];
+
+		}
+
+	}
+}
+//----------------------------------------------------------------
+// 法線コピー
+//----------------------------------------------------------------
+global proc NormalCopy()
+{
+	// グローバル
+	global string $g_minLengthTextField;
+
+	// window 作成
+	string $window		= `window -t "NormalCopy" -widthHeight 300 100`;
+
+	// formLayout 作成
+	string $form		= `formLayout`;
+
+	// 参照する距離
+	string $minLengthText		= `text -label "参照する距離"`;
+	$g_minLengthTextField		= `textField`;
+	textField -edit -tx "0.001" $g_minLengthTextField;
+
+	// 頂点情報の取得ボタンの作成
+	string $getButton	= `button -label "適用"	-command "NormalCopyGetVertex"`;
+
+	// レイアウト設定
+	formLayout -edit
+		-attachForm		$minLengthText				"top"		0
+		-attachForm		$minLengthText				"left"		0
+		-attachControl	$minLengthText				"bottom"	0 $getButton
+		-attachPosition	$minLengthText				"right"		0 50
+
+		-attachForm		$g_minLengthTextField		"top"		0
+		-attachPosition	$g_minLengthTextField		"left"		0 50
+		-attachControl	$g_minLengthTextField		"bottom"	0 $getButton
+		-attachForm		$g_minLengthTextField		"right"		0
+
+		-attachNone		$getButton					"top"
+		-attachForm		$getButton					"left"		0
+		-attachForm		$getButton					"bottom"	0
+		-attachForm		$getButton					"right"		0
+
+	$form;
+
+	// window 表示
+	showWindow $window;
+}
+//----------------------------------------------------------------
